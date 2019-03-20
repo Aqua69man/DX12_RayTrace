@@ -218,7 +218,13 @@ void Tutorial03::endFrame(uint32_t rtvIndex)
 //////////////////////////////////////////////////////////////////////////
 static const D3D12_HEAP_PROPERTIES kUploadHeapProps =
 {
-    D3D12_HEAP_TYPE_UPLOAD,
+	// D3D12_HEAP_TYPE_UPLOAD:
+	//  - Used for uploading. 
+	//  - CPU - optimized for uploading to GPU, but does not experience 
+	//			the maximum amount of bandwidth for the GPU. 
+	//  - This heap type is best for CPU-write-once, GPU-read-once data; 
+	//	  but GPU-read-once is stricter than necessary. 
+	D3D12_HEAP_TYPE_UPLOAD,
     D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
     D3D12_MEMORY_POOL_UNKNOWN,
     0,
@@ -227,7 +233,12 @@ static const D3D12_HEAP_PROPERTIES kUploadHeapProps =
 
 static const D3D12_HEAP_PROPERTIES kDefaultHeapProps =
 {
-    D3D12_HEAP_TYPE_DEFAULT,
+	// D3D12_HEAP_TYPE_DEFAULT:
+	//	- CPU - cannot access,
+	//  - GPU - read / write,
+	//  - Rsource transition barriers 
+	//	  may be changed
+	D3D12_HEAP_TYPE_DEFAULT,
     D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
     D3D12_MEMORY_POOL_UNKNOWN,
     0,
@@ -279,31 +290,44 @@ struct AccelerationStructureBuffers
     ID3D12ResourcePtr pInstanceDesc;    // Used only for top-level AS
 };
 
+// The BottomLevelAS - BLAS is a data structure that represent a local-space mesh. 
+// It does not contain information regarding the world-space location of the vertices or instancing information. 
 AccelerationStructureBuffers createBottomLevelAS(ID3D12Device5Ptr pDevice, ID3D12GraphicsCommandList4Ptr pCmdList, ID3D12ResourcePtr pVB)
 {
-    D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
-    geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-    geomDesc.Triangles.VertexBuffer.StartAddress = pVB->GetGPUVirtualAddress();
-    geomDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(vec3);
-    geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-    geomDesc.Triangles.VertexCount = 3;
-    geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+	// Geometry Description
+	D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
+	{
+		geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+		geomDesc.Triangles.VertexBuffer.StartAddress = pVB->GetGPUVirtualAddress();
+		geomDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(vec3);
+		geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+		geomDesc.Triangles.VertexCount = 3;
+		geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+	}
 
-    // Get the size requirements for the scratch and AS buffers
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-    inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-    inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-    inputs.NumDescs = 1;
-    inputs.pGeometryDescs = &geomDesc;
-    inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-    
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
-    pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+	// DXR requires 2 buffers:
+	//		1. Scratch buffer - which is required for intermediate computation.
+	//		2. Result buffer - which will hold the acceleration data.
+	AccelerationStructureBuffers buffers;
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	{
+		// To allocate these buffers, we need to know the required size.
+		// Get the size requirements for the scratch and AS(result) buffers
+		inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+		inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+		inputs.NumDescs = 1;
+		inputs.pGeometryDescs = &geomDesc;
+		inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;  // BOTTOM
 
-    // Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
-    AccelerationStructureBuffers buffers;
-    buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
-    buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
+		pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+
+		// Create the buffers.
+		// The buffers are allocated on the default heap, since we don’t need CPU read/write access to them. Both buffers must be created with the D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS flag because the implementation will be performing read/write operations, and synchronizing operations on these buffers are done through UAV barriers.
+		// They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
+		buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
+		buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
+	}
 
     // Create the bottom-level AS
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
@@ -329,7 +353,7 @@ AccelerationStructureBuffers createTopLevelAS(ID3D12Device5Ptr pDevice, ID3D12Gr
     inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
     inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
     inputs.NumDescs = 1;
-    inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+    inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;	// TOP
 
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
     pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
