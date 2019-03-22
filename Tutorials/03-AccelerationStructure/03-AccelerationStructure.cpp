@@ -305,7 +305,7 @@ AccelerationStructureBuffers createBottomLevelAS(ID3D12Device5Ptr pDevice, ID3D1
 		geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
 	}
 
-	// DXR requires 2 buffers:
+	// DXR requires 2 buffers (creating them):
 	//		1. Scratch buffer - which is required for intermediate computation.
 	//		2. Result buffer - which will hold the acceleration data.
 	AccelerationStructureBuffers buffers;
@@ -323,21 +323,34 @@ AccelerationStructureBuffers createBottomLevelAS(ID3D12Device5Ptr pDevice, ID3D1
 		pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
 
 		// Create the buffers.
-		// The buffers are allocated on the default heap, since we don’t need CPU read/write access to them. Both buffers must be created with the D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS flag because the implementation will be performing read/write operations, and synchronizing operations on these buffers are done through UAV barriers.
-		// They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
+		// The buffers are allocated on the default heap, since we don’t need CPU read/write access to them.
+		//     Both buffers must be created with the D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS flag because 
+		//     the implementation will be performing GPU read/write operations, and synchronizing operations
+		//     on these buffers are done through UAV barriers.
+		// They need to support UAV, and since we are going to immediately use them, we create them with an 
+		//     unordered-access state
+		// The spec also requires the state of the buffers to be:
+		//     - D3D12_RESOURCE_STATE_UNORDERED_ACCESS - for the scratch buffer.
+		//     - D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE - for the destination buffer.
 		buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
 		buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
 	}
 
     // Create the bottom-level AS
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
-    asDesc.Inputs = inputs;
-    asDesc.DestAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
-    asDesc.ScratchAccelerationStructureData = buffers.pScratch->GetGPUVirtualAddress();
+	{
+		asDesc.Inputs = inputs;
+		asDesc.DestAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
+		asDesc.ScratchAccelerationStructureData = buffers.pScratch->GetGPUVirtualAddress();
 
-    pCmdList->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
+		// BuildRaytracingAccelerationStructure command will not be processed until we submit the command list,
+		// so make sure the scratch-buffer will not be released until execution finishes.
+		pCmdList->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
+	}
 
-    // We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
+	// We will use the BLAS as an input for another BuildRaytracingAccelerationStructure() operation. 
+	// We need to make sure that the !WRITE! operation will finish before reading data from the result buffer.
+	// We do that using a regular UAV-barrier.
     D3D12_RESOURCE_BARRIER uavBarrier = {};
     uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
     uavBarrier.UAV.pResource = buffers.pResult;
@@ -346,51 +359,70 @@ AccelerationStructureBuffers createBottomLevelAS(ID3D12Device5Ptr pDevice, ID3D1
     return buffers;
 }
 
+// The TLAS is a data structure that represents the ENTIRE scene. As we recall, BLAS represents objects in local space. 
+// The TLAS references the bottom-level structures, with each reference containing local-to-world transformation matrix.
 AccelerationStructureBuffers createTopLevelAS(ID3D12Device5Ptr pDevice, ID3D12GraphicsCommandList4Ptr pCmdList, ID3D12ResourcePtr pBottomLevelAS, uint64_t& tlasSize)
 {
-    // First, get the size of the TLAS buffers and create them
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-    inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-    inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-    inputs.NumDescs = 1;
-    inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;	// TOP
+    // First, get the size of the TLAS buffers and CREATE them
+	AccelerationStructureBuffers buffers;
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	{
+		// To allocate these buffers, we need to know the required size.
+		// Get the size requirements for the scratch and AS(result) buffers
+		inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+		inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+		inputs.NumDescs = 1;
+		inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;	// TOP
 
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
-    pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
+		pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
 
-    // Create the buffers
-    AccelerationStructureBuffers buffers;
-    buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
-    buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
-    tlasSize = info.ResultDataMaxSizeInBytes;
+		// Like for BLAS, need to create 2 buffers.
+		buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
+		buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
+		tlasSize = info.ResultDataMaxSizeInBytes;
+	}
 
-    // The instance desc should be inside a buffer, create and map the buffer
-    buffers.pInstanceDesc = createBuffer(pDevice, sizeof(D3D12_RAYTRACING_INSTANCE_DESC), D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ, kUploadHeapProps);
-    D3D12_RAYTRACING_INSTANCE_DESC* pInstanceDesc;
-    buffers.pInstanceDesc->Map(0, nullptr, (void**)&pInstanceDesc);
+	// Create and init INSTANCE buffer:
+	//    - Describe the instances used for the TLAS. Do that by filling a buffer of D3D12_RAYTRACING_INSTANCE_DESC. 
+	//      We pass an array of such descriptors to the BuildRaytracingAcceleration() function. This array describes the scene.
+	//    - The instance desc should be inside a pInstanceDesc buffer. Create and map the buffer.
+	//    - Create buffer in UPLOAD HEAP, compared to other buffers.
+	//    - Important thing to know about InstanceDescs array, is that it can’t simply reside on the regular C++ heap. 
+	//      We need to pass this array that is in a GPU buffer (either on the upload or default heap) to BuildRaytracingAcceleration(). 
+	{
+		buffers.pInstanceDesc = createBuffer(pDevice, sizeof(D3D12_RAYTRACING_INSTANCE_DESC), D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ, kUploadHeapProps);
+		D3D12_RAYTRACING_INSTANCE_DESC* pInstanceDesc;
 
-    // Initialize the instance desc. We only have a single instance
-    pInstanceDesc->InstanceID = 0;                            // This value will be exposed to the shader via InstanceID()
-    pInstanceDesc->InstanceContributionToHitGroupIndex = 0;   // This is the offset inside the shader-table. We only have a single geometry, so the offset 0
-    pInstanceDesc->Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-    mat4 m; // Identity matrix
-    memcpy(pInstanceDesc->Transform, &m, sizeof(pInstanceDesc->Transform));
-    pInstanceDesc->AccelerationStructure = pBottomLevelAS->GetGPUVirtualAddress();
-    pInstanceDesc->InstanceMask = 0xFF;
-    
-    // Unmap
-    buffers.pInstanceDesc->Unmap(0, nullptr);
+		// Map
+		buffers.pInstanceDesc->Map(0, nullptr, (void**)&pInstanceDesc);
+			// Initialize the instance desc:
+			// We only have a single instance.
+			pInstanceDesc->InstanceID = 0;                            // This value will be exposed to the shader via InstanceID()
+			pInstanceDesc->InstanceContributionToHitGroupIndex = 0;   // The offset inside the shader-table. We only have a single geometry, so the offset 0
+			pInstanceDesc->Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+			mat4 m; // Identity matrix
+			memcpy(pInstanceDesc->Transform, &m, sizeof(pInstanceDesc->Transform)); // It’s a 3x4 affine TRANSFORM MATRIX in row-major layout. This transformation will be applied to each vertex in the bottom-level structure. This value can also be nullptr, which is equivalent to setting an identity matrix, but may result in better performance
+			pInstanceDesc->AccelerationStructure = pBottomLevelAS->GetGPUVirtualAddress();
+			pInstanceDesc->InstanceMask = 0xFF;
+		// Unmap
+		buffers.pInstanceDesc->Unmap(0, nullptr);
+	}
         
     // Create the TLAS
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
-    asDesc.Inputs = inputs;
-    asDesc.Inputs.InstanceDescs = buffers.pInstanceDesc->GetGPUVirtualAddress();
-    asDesc.DestAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
-    asDesc.ScratchAccelerationStructureData = buffers.pScratch->GetGPUVirtualAddress();
+	{
+		asDesc.Inputs = inputs;
+		asDesc.Inputs.InstanceDescs = buffers.pInstanceDesc->GetGPUVirtualAddress();
+		asDesc.DestAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
+		asDesc.ScratchAccelerationStructureData = buffers.pScratch->GetGPUVirtualAddress();
+	
+		pCmdList->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
+	}
 
-    pCmdList->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
-
-    // We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
+    // We need to insert a UAV barrier as we need to make sure that the write operation performed 
+	// in BuildRaytracingAccelerationStructure() finishes before the read operation in Raytracing operation -
+	// i.e. in DispatchRays() call.
     D3D12_RESOURCE_BARRIER uavBarrier = {};
     uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
     uavBarrier.UAV.pResource = buffers.pResult;
@@ -412,9 +444,16 @@ void Tutorial03::createAccelerationStructures()
     uint32_t bufferIndex = mpSwapChain->GetCurrentBackBufferIndex();
     mpCmdList->Reset(mFrameObjects[0].pCmdAllocator, nullptr);
 
-    // Store the AS buffers. The rest of the buffers will be released once we exit the function
+	// The last part is releasing resources that are no longer required and keep references 
+	//     to the resources which WILL BE USED for rendering. As we are using smart COM-pointers, 
+	//     we know that keeping reference is just storing a copy of the smart-pointer.
+    // Store the AS buffers. The rest of the buffers will be released once we exit the function.
     mpTopLevelAS = topLevelBuffers.pResult;
     mpBottomLevelAS = bottomLevelBuffers.pResult;
+
+	// Note that we need to store both top-level and bottom-level structures. The scratch buffers 
+	// and the instance-desc buffers will be released automatically once the local variable holding
+	// their smart pointer goes out of scope.
 }
 
 
