@@ -669,6 +669,9 @@ void Tutorial04::createRtPipelineState()
     LocalRootSignature rgsRootSignature(mpDevice, createRayGenRootDesc().desc);
     subobjects[index] = rgsRootSignature.subobject; // 2 RayGen Root Sig
 
+	// Now that we created a LocalRootSignature object, we need to associate
+	// it with one of the shader. We do that using something called 
+	// an Export Assoication.
     uint32_t rgsRootIndex = index++; // 2
     ExportAssociation rgsRootAssociation(&kRayGenShader, 1, &(subobjects[rgsRootIndex]));
     subobjects[index++] = rgsRootAssociation.subobject; // 3 Associate Root Sig to RGS
