@@ -697,6 +697,8 @@ void Tutorial04::createRtPipelineState()
     subobjects[index++] = configAssociation.subobject; // 7 Associate Shader Config to Miss, CHS, RGS
 
     // Create the pipeline config
+	// [0 = MaxTraceRecursionDepth] This value simply tells the pipeline 
+	// how many recursive raytracing calls we are going to make. 
     PipelineConfig config(0);
     subobjects[index++] = config.subobject; // 8
 
