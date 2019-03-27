@@ -687,7 +687,14 @@ void Tutorial04::createRtPipelineState()
     ExportAssociation missHitRootAssociation(missHitExportName, arraysize(missHitExportName), &(subobjects[hitMissRootIndex]));
     subobjects[index++] = missHitRootAssociation.subobject; // 5 Associate Root Sig to Miss and CHS
 
-    // Bind the payload size to the programs
+    // Bind the payload size to the programs.
+	//
+	// There are 2 values we need to set for shader configiration:
+	//		1.	The attributes size in bytes. This is the size of the data the hit - shader accepts as its intersection
+	//			- attributes parameter. For the built - in intersection shader, the attributes size is 8 - bytes(2 floats).
+	//		2.	The payload size in bytes. This is the size of the payload struct we defined in the HLSL.
+	//			In our case the payload is a single bool(4 - bytes in HLSL).
+	// Once we create a ShaderConfig object, we need to associate it with our shaders.
     ShaderConfig shaderConfig(sizeof(float) * 2, sizeof(float) * 1);
     subobjects[index] = shaderConfig.subobject; // 6 Shader Config
 
@@ -696,7 +703,7 @@ void Tutorial04::createRtPipelineState()
     ExportAssociation configAssociation(shaderExports, arraysize(shaderExports), &(subobjects[shaderConfigIndex]));
     subobjects[index++] = configAssociation.subobject; // 7 Associate Shader Config to Miss, CHS, RGS
 
-    // Create the pipeline config
+    // Create the pipeline config.
 	// [0 = MaxTraceRecursionDepth] This value simply tells the pipeline 
 	// how many recursive raytracing calls we are going to make. 
     PipelineConfig config(0);
