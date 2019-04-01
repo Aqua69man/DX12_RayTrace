@@ -47,12 +47,12 @@ struct RayPayload
 void rayGen()
 {
     uint3 launchIndex = DispatchRaysIndex();
-    uint3 launchDim = DispatchRaysDimensions();
+	uint3 launchDim = DispatchRaysDimensions();
 
-    float2 crd = float2(launchIndex.xy);
-    float2 dims = float2(launchDim.xy);
+	float2 crd = float2(launchIndex.xy);			// x[0,...,1919], y[0, 1079] - for 1920x1080 res
+	float2 dims = float2(launchDim.xy);				// x=1920, y=1080			 - for 1920x1080 res
 
-    float2 d = ((crd/dims) * 2.f - 1.f);
+    float2 d = ((crd/dims) * 2.f - 1.f);			// [-1, 1]
     float aspectRatio = dims.x / dims.y;
 
     RayDesc ray;

@@ -42,7 +42,7 @@ float3 linearToSrgb(float3 c)
 void rayGen()
 {
     uint3 launchIndex = DispatchRaysIndex();
-    float3 col = linearToSrgb(float3(0.4, 0.6, 0.2));
+	float3 col = linearToSrgb(float3(0.4, 0.6, 0.2));
     gOutput[launchIndex.xy] = float4(col, 1);
 }
 
