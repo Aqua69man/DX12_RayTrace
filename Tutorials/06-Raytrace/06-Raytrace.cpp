@@ -699,6 +699,7 @@ void Tutorial06::createRtPipelineState()
     subobjects[index++] = configAssociation.subobject; // 7 Associate Shader Config to Miss, CHS, RGS
 
     // Create the pipeline config
+	// 0 - not actually tracing rays
     PipelineConfig config(0);
     subobjects[index++] = config.subobject; // 8
 
