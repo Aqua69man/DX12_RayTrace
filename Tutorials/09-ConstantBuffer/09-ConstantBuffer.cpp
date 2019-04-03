@@ -762,7 +762,7 @@ void Tutorial09::createShaderTable()
 
     // Calculate the size and create the buffer
     mShaderTableEntrySize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-    mShaderTableEntrySize += 8; // The ray-gen's descriptor table
+    mShaderTableEntrySize += 8; // The ray-gen's descriptor table is 8 bytes, hit programm's root descriptor is 8 bytes - so leave it 8 bytes (fits both)
     mShaderTableEntrySize = align_to(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, mShaderTableEntrySize);
     uint32_t shaderTableSize = mShaderTableEntrySize * 3;
 
