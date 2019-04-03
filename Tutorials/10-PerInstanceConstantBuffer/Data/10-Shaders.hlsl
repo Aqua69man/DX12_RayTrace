@@ -70,6 +70,18 @@ void rayGen()
     ray.TMax = 100000;
 
     RayPayload payload;
+	// param_1  -  Is the TLAS SRV.
+	// param_2  -  Is the ray flags. These flags allow us to control the traversal behavior,
+	//			       for example enable back-face culling.
+	// param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays.
+	//			       We will not cover this topic in the tutorials. 0xFF means no culling.
+	// param_4_5 - Are "RayContributionToHitGroupIndex" and "MultiplierForGeometryContributionToHitGroupIndex".
+	//			       They are used for shader-table indexing. We will cover them in later tutorials, 
+	//			       for now we will set both to 0.
+	// param_6	 - Is the miss-shader index. This index is relative to the base miss-shader index we passed when 
+	//				   calling DispatchRays(). We only have a single miss-shader, so we will set the index to 0.
+	// param_7	 - Is the RayDesc object we created.
+	// param_8	 - RayPayload object.
     TraceRay( gRtScene, 0 /*rayFlags*/, 0xFF, 0 /* ray index*/, 0, 0, ray, payload );
     float3 col = linearToSrgb(payload.color);
     gOutput[launchIndex.xy] = float4(col, 1);

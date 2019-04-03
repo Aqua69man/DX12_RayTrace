@@ -909,7 +909,7 @@ void Tutorial10::onFrameRender()
     size_t hitOffset = 2 * mShaderTableEntrySize;
     raytraceDesc.HitGroupTable.StartAddress = mpShaderTable->GetGPUVirtualAddress() + hitOffset;
     raytraceDesc.HitGroupTable.StrideInBytes = mShaderTableEntrySize;
-    raytraceDesc.HitGroupTable.SizeInBytes = mShaderTableEntrySize * 3;
+    raytraceDesc.HitGroupTable.SizeInBytes = mShaderTableEntrySize * (3); // As we have 3 instances (of the same triangle), but with different shader tables(CBs)
 
     // Bind the empty root signature
     mpCmdList->SetComputeRootSignature(mpEmptyRootSig);
