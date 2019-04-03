@@ -208,7 +208,8 @@ void Tutorial09::endFrame(uint32_t rtvIndex)
 {
     resourceBarrier(mpCmdList, mFrameObjects[rtvIndex].pSwapChainBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
     mFenceValue = submitCommandList(mpCmdList, mpCmdQueue, mpFence, mFenceValue);
-    mpSwapChain->Present(0, 0);
+	bool useVsync = 1;
+	mpSwapChain->Present(useVsync ? 1 : 0, 0);
 
     // Prepare the command list for the next frame
     uint32_t bufferIndex = mpSwapChain->GetCurrentBackBufferIndex();

@@ -208,7 +208,8 @@ void Tutorial11::endFrame(uint32_t rtvIndex)
 {
     resourceBarrier(mpCmdList, mFrameObjects[rtvIndex].pSwapChainBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
     mFenceValue = submitCommandList(mpCmdList, mpCmdQueue, mpFence, mFenceValue);
-    mpSwapChain->Present(0, 0);
+	bool useVsync = 1;
+	mpSwapChain->Present(useVsync ? 1 : 0, 0);
 
     // Prepare the command list for the next frame
     uint32_t bufferIndex = mpSwapChain->GetCurrentBackBufferIndex();
@@ -366,7 +367,7 @@ AccelerationStructureBuffers createTopLevelAS(ID3D12Device5Ptr pDevice, ID3D12Gr
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
     inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
     inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-    inputs.NumDescs = 3;
+    inputs.NumDescs = 3;  // We are still initializing 3 instances: 1) Tiangle+Plane [center]; 2) Triangle [left]; 3) Triangle [right];
     inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
@@ -379,6 +380,11 @@ AccelerationStructureBuffers createTopLevelAS(ID3D12Device5Ptr pDevice, ID3D12Gr
     tlasSize = info.ResultDataMaxSizeInBytes;
 
     // The instance desc should be inside a buffer, create and map the buffer
+	//
+	// - We are still initializing 3 instances: 1) Tiangle+Plane [center]; 2) Triangle [left]; 3) Triangle [right];
+	// - The difference with previous lesson is that we initialize the FIRST D3D12_RAYTRACING_INSTANCE_DESC instance 
+	//   with the bottom-level acceleration structure containing both geometries [1]Triangle+Plane. The rest instances are
+	//   [2]Triangle, [3]Triangle.
     buffers.pInstanceDesc = createBuffer(pDevice, sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 3, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ, kUploadHeapProps);
     D3D12_RAYTRACING_INSTANCE_DESC* instanceDescs;
     buffers.pInstanceDesc->Map(0, nullptr, (void**)&instanceDescs);
