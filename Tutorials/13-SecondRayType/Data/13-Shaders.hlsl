@@ -76,11 +76,14 @@ void rayGen()
 	//	    		       for example enable back-face culling.
 	//     param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays.
 	//	    		       We will not cover this topic in the tutorials. 0xFF means no culling.
-	//     param_4_5 - Are "RayContributionToHitGroupIndex" and "MultiplierForGeometryContributionToHitGroupIndex".
-	//	    		       They are used for shader-table indexing. We will cover them in later tutorials, 
-	//	    		       for now we will set both to 0.
+	//     param_4  -  RayContributionToHitGroupIndex - the ray-index. 0 For the primary-ray, 1 for the shadow-ray. 
+	//     param_5  -  MultiplierForGeometryContributionToShaderIndex - only affects instances with multiple geometries in BLAS. 
+	//				       In our case, it affects only BLAS with two geometries (Triangle + Plane). 
+	//					   GeometryIndex(for Triangle) = 0, GeometryIndex(for Plane) = 1 
+	//					   Actually, this is the distance in records between geometries. 
 	//     param_6	 - Is the MissShaderIndex. This index is relative to the base miss-shader index we passed when 
-	//	    			   calling DispatchRays(). We only have a single miss-shader, so we will set the index to 0.
+	//	    			   calling DispatchRays(). Since our miss-shaders entries are stored contiguously 
+	//					   in the shader-table, we can treat this value as the ray-index.
 	//     param_7	 - Is the RayDesc object we created.
 	//     param_8	 - RayPayload object.
 	
@@ -94,8 +97,8 @@ void rayGen()
 	//						   GeometryIndex(from_mpVertexBuffer=0/1) * MultiplierForGeometryContributionToShaderIndex(param_5) +
 	//						   RayContributionToHitGroupIndex(param_4)
 	//
-	// RayContributionToHitGroupIndex:						Leaving  = 0 (This is the first ray)
-	// MultiplierForGeometryContributionToHitGroupIndex:	SETTING  = 2
+	// RayContributionToHitGroupIndex:						Leaving  = 0 (This is the first/PRIMARY ray)
+	// MultiplierForGeometryContributionToShaderIndex:		SETTING  = 2
 
 	// We have 11 entries(SHADER_ID):
 	//     Entry 0 - Ray - gen program
@@ -132,9 +135,9 @@ struct ShadowPayload
 [shader("closesthit")]
 void planeChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-    float hitT = RayTCurrent();
-    float3 rayDirW = WorldRayDirection();
-    float3 rayOriginW = WorldRayOrigin();
+    float hitT = RayTCurrent();	// ray distance, i.e. distance from ray's origin to intersection point
+    float3 rayDirW = WorldRayDirection(); // WorldSpace direction of incoming ray: (hitPoint - originPoint)
+    float3 rayOriginW = WorldRayOrigin(); // WorldSpace originPoint position of incoming ray
 
     // Find the world-space hit position
     float3 posW = rayOriginW + hitT * rayDirW;
@@ -142,8 +145,8 @@ void planeChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes
     // Fire a shadow ray. The direction is hard-coded here, but can be fetched from a constant-buffer
     RayDesc ray;
     ray.Origin = posW;
-    ray.Direction = normalize(float3(0.5, 0.5, -0.5));
-    ray.TMin = 0.01;
+    ray.Direction = normalize(float3(0.5, 0.5, -0.5));  // hard-coded direction to the light source
+    ray.TMin = 0.01; // !!_Note_!! that we do not use 0 for TMin but set it into a small value. This is to avoid aliasing issues due to floating-point errors.
     ray.TMax = 100000;
     ShadowPayload shadowPayload;
 
@@ -153,11 +156,14 @@ void planeChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes
 	//	    		       for example enable back-face culling.
 	//     param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays.
 	//	    		       We will not cover this topic in the tutorials. 0xFF means no culling.
-	//     param_4_5 - Are "RayContributionToHitGroupIndex" and "MultiplierForGeometryContributionToHitGroupIndex".
-	//	    		       They are used for shader-table indexing. We will cover them in later tutorials, 
-	//	    		       for now we will set both to 0.
+	//     param_4  -  RayContributionToHitGroupIndex - the ray-index. 0 For the primary-ray, 1 for the shadow-ray. 
+	//     param_5  -  MultiplierForGeometryContributionToShaderIndex - only affects instances with multiple geometries in BLAS. 
+	//				       In our case, it affects only BLAS with two geometries (Triangle + Plane). 
+	//					   GeometryIndex(for Triangle) = 0, GeometryIndex(for Plane) = 1 
+	//					   Actually, this is the distance in records between geometries. 
 	//     param_6	 - Is the MissShaderIndex. This index is relative to the base miss-shader index we passed when 
-	//	    			   calling DispatchRays(). We only have a single miss-shader, so we will set the index to 0.
+	//	    			   calling DispatchRays(). Since our miss-shaders entries are stored contiguously 
+	//					   in the shader-table, we can treat this value as the ray-index.
 	//     param_7	 - Is the RayDesc object we created.
 	//     param_8	 - RayPayload object.
 
@@ -171,8 +177,8 @@ void planeChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes
 	//						   GeometryIndex(from_mpVertexBuffer=0/1) * MultiplierForGeometryContributionToShaderIndex(param_5) +
 	//						   RayContributionToHitGroupIndex(param_4)
 	//
-	// RayContributionToHitGroupIndex:						SETTING  = 1 (This is the second ray - previos ray had index=0, for this one has index=1)
-	// MultiplierForGeometryContributionToHitGroupIndex:	Leaving  = 0
+	// RayContributionToHitGroupIndex:						SETTING  = 1 (This is the second/SHADOW ray - previos ray had index=0, for this one has index=1)
+	// MultiplierForGeometryContributionToShaderIndex:		Leaving  = 0
 
 	// We have 11 entries(SHADER_ID):
 	//     Entry 0 - Ray - gen program
