@@ -84,8 +84,8 @@ void rayGen()
 	//     param_7	 - Is the RayDesc object we created.
 	//     param_8	 - RayPayload object.
 	
-	// !! Setting MultiplierForGeometryContributionToHitGroupIndex = 1 !!
-	// Leaving RayContributionToHitGroupIndex as it was (i.e. = 0).
+	// param_4 - Leaving RayContributionToHitGroupIndex as it was (i.e. = 0)
+	// param_5 - SETTING MultiplierForGeometryContributionToHitGroupIndex = 1
     TraceRay( gRtScene, 0 /*rayFlags*/, 0xFF, 0 /* ray index*/, 1 /*-HERE-*/, 0, ray, payload );
     float3 col = linearToSrgb(payload.color);
     gOutput[launchIndex.xy] = float4(col, 1);

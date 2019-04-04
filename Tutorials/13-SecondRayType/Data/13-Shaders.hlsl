@@ -70,7 +70,24 @@ void rayGen()
     ray.TMax = 100000;
 
     RayPayload payload;
-    TraceRay( gRtScene, 0 /*rayFlags*/, 0xFF, 0 /* ray index*/, 2, 0, ray, payload );
+	// TraceRay():
+	//     param_1  -  Is the TLAS SRV.
+	//     param_2  -  Is the ray flags. These flags allow us to control the traversal behavior,
+	//	    		       for example enable back-face culling.
+	//     param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays.
+	//	    		       We will not cover this topic in the tutorials. 0xFF means no culling.
+	//     param_4_5 - Are "RayContributionToHitGroupIndex" and "MultiplierForGeometryContributionToHitGroupIndex".
+	//	    		       They are used for shader-table indexing. We will cover them in later tutorials, 
+	//	    		       for now we will set both to 0.
+	//     param_6	 - Is the miss-shader index. This index is relative to the base miss-shader index we passed when 
+	//	    			   calling DispatchRays(). We only have a single miss-shader, so we will set the index to 0.
+	//     param_7	 - Is the RayDesc object we created.
+	//     param_8	 - RayPayload object.
+	
+	// param_4 - Leaving RayContributionToHitGroupIndex = 0 (This is the first ray)
+	// param_5 - SETTING MultiplierForGeometryContributionToHitGroupIndex = 1
+	// param_6 - Leaving miss-shader index = 0
+    TraceRay( gRtScene, 0 /*rayFlags*/, 0xFF, 0 /* ray index*/, 2 /*!-HERE-!*/, 0, ray, payload );
     float3 col = linearToSrgb(payload.color);
     gOutput[launchIndex.xy] = float4(col, 1);
 }
@@ -110,7 +127,10 @@ void planeChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes
     ray.TMin = 0.01;
     ray.TMax = 100000;
     ShadowPayload shadowPayload;
-    TraceRay(gRtScene, 0  /*rayFlags*/, 0xFF, 1 /* ray index*/, 0, 1, ray, shadowPayload);
+	// param_4 - Leaving RayContributionToHitGroupIndex = 1 (This is the second ray - previos ray had index=0, for this one has index=1)
+	// param_5 - Leaving MultiplierForGeometryContributionToHitGroupIndex = 0
+	// param_6 - SETTING miss-shader index = 1
+    TraceRay(gRtScene, 0  /*rayFlags*/, 0xFF, 1 /* ray index*/, 0, 1 /*!-HERE-!*/, ray, shadowPayload);
 
     float factor = shadowPayload.hit ? 0.1 : 1.0;
     payload.color = float4(0.9f, 0.9f, 0.9f, 1.0f) * factor;

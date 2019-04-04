@@ -208,7 +208,8 @@ void Tutorial13::endFrame(uint32_t rtvIndex)
 {
     resourceBarrier(mpCmdList, mFrameObjects[rtvIndex].pSwapChainBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
     mFenceValue = submitCommandList(mpCmdList, mpCmdQueue, mpFence, mFenceValue);
-    mpSwapChain->Present(0, 0);
+	bool useVsync = 1;
+	mpSwapChain->Present(useVsync ? 1 : 0, 0);
 
     // Prepare the command list for the next frame
     uint32_t bufferIndex = mpSwapChain->GetCurrentBackBufferIndex();
@@ -770,7 +771,7 @@ void Tutorial13::createRtPipelineState()
 
     // Create the plane HitProgram
     HitProgram planeHitProgram(nullptr, kPlaneChs, kPlaneHitGroup);
-    subobjects[index++] = planeHitProgram.subObject; // 2 Plant Hit Group
+    subobjects[index++] = planeHitProgram.subObject; // 2 Plane Hit Group
 
     // Create the shadow-ray hit group
     HitProgram shadowHitProgram(nullptr, kShadowChs, kShadowHitGroup);
@@ -789,7 +790,7 @@ void Tutorial13::createRtPipelineState()
     subobjects[index] = triHitRootSignature.subobject; // 6 Triangle Hit Root Sig
 
     uint32_t triHitRootIndex = index++; // 6
-    ExportAssociation triHitRootAssociation(&kTriangleChs, 1, &(subobjects[triHitRootIndex]));
+    ExportAssociation triHitRootAssociation(&kTriHitGroup /*or kTriangleChs*/, 1, &(subobjects[triHitRootIndex]));
     subobjects[index++] = triHitRootAssociation.subobject; // 7 Associate Triangle Root Sig to Triangle Hit Group
 
     // Create the plane hit root-signature and association
@@ -797,7 +798,7 @@ void Tutorial13::createRtPipelineState()
     subobjects[index] = planeHitRootSignature.subobject; // 8 Plane Hit Root Sig
 
     uint32_t planeHitRootIndex = index++; // 8
-    ExportAssociation planeHitRootAssociation(&kPlaneHitGroup, 1, &(subobjects[planeHitRootIndex]));
+    ExportAssociation planeHitRootAssociation(&kPlaneHitGroup /*or kPlaneChs*/, 1, &(subobjects[planeHitRootIndex]));
     subobjects[index++] = planeHitRootAssociation.subobject; // 9 Associate Plane Hit Root Sig to Plane Hit Group
 
     // Create the empty root-signature and associate it with the primary miss-shader and the shadow programs
@@ -807,12 +808,16 @@ void Tutorial13::createRtPipelineState()
     subobjects[index] = emptyRootSignature.subobject; // 10 Empty Root Sig for Plane Hit Group and Miss
 
     uint32_t emptyRootIndex = index++; // 10
-    const WCHAR* emptyRootExport[] = { kMissShader, kShadowChs, kShadowMiss };
+    const WCHAR* emptyRootExport[] = { kMissShader, kShadowChs/*or kShadowHitGroup*/, kShadowMiss };
     ExportAssociation emptyRootAssociation(emptyRootExport, arraysize(emptyRootExport), &(subobjects[emptyRootIndex]));
     subobjects[index++] = emptyRootAssociation.subobject; // 11 Associate empty root sig to Plane Hit Group and Miss shader
 
-    // Bind the payload size to all programs
-    ShaderConfig primaryShaderConfig(sizeof(float) * 2, sizeof(float) * 3);
+    // Bind the payload size to all programs:
+	//	  1) Even though, the ShadowPayload is a different size compared with RayPayload, 
+	//	     there can only be one defined MAX SIZE per State Object
+	//    2) Note, it is valid to associate your shaders to multiple ShaderConfig sub-objects 
+	//       if their VALUES are the SAME, but we will only use one here for simplicity.
+    ShaderConfig primaryShaderConfig(sizeof(float) * 2, sizeof(float) * 3 /*PayLoad Size*/);
     subobjects[index] = primaryShaderConfig.subobject; // 12
 
     uint32_t primaryShaderConfigIndex = index++;
@@ -820,7 +825,9 @@ void Tutorial13::createRtPipelineState()
     ExportAssociation primaryConfigAssociation(primaryShaderExports, arraysize(primaryShaderExports), &(subobjects[primaryShaderConfigIndex]));
     subobjects[index++] = primaryConfigAssociation.subobject; // 13 Associate shader config to all programs
 
-    // Create the pipeline config
+    // Create the pipeline config:
+	//    1) [2 = MaxTraceRecursionDepth] Tells the pipeline how many recursive raytracing calls we are going to make.
+	//    2) We’re going to call TraceRay() once from the ray-gen shader and once from the plane-CHS.
     PipelineConfig config(2); // maxRecursionDepth - 1 TraceRay() from the ray-gen, 1 TraceRay() from the primary hit-shader
     subobjects[index++] = config.subobject; // 14
 

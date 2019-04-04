@@ -208,7 +208,8 @@ void Tutorial12::endFrame(uint32_t rtvIndex)
 {
     resourceBarrier(mpCmdList, mFrameObjects[rtvIndex].pSwapChainBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
     mFenceValue = submitCommandList(mpCmdList, mpCmdQueue, mpFence, mFenceValue);
-    mpSwapChain->Present(0, 0);
+	bool useVsync = 1;
+	mpSwapChain->Present(useVsync ? 1 : 0, 0);
 
     // Prepare the command list for the next frame
     uint32_t bufferIndex = mpSwapChain->GetCurrentBackBufferIndex();
@@ -774,7 +775,7 @@ void Tutorial12::createRtPipelineState()
     subobjects[index++] = emptyRootAssociation.subobject; // 8 Associate empty root sig to Plane Hit Group and Miss shader
 
     // Bind the payload size to the programs
-    ShaderConfig shaderConfig(sizeof(float) * 2, sizeof(float) * 3);
+    ShaderConfig shaderConfig(sizeof(float) * 2, sizeof(float) * 3 /*PayLoad size*/);
     subobjects[index] = shaderConfig.subobject; // 9 Shader Config
 
     uint32_t shaderConfigIndex = index++; // 9
@@ -783,7 +784,9 @@ void Tutorial12::createRtPipelineState()
     subobjects[index++] = configAssociation.subobject; // 10 Associate Shader Config to all shaders and hit groups
 
     // Create the pipeline config
-    PipelineConfig config(1);
+	// [1 = MaxTraceRecursionDepth] This value simply tells the pipeline 
+	// how many recursive raytracing calls we are going to make. 
+	PipelineConfig config(1);
     subobjects[index++] = config.subobject; // 11
 
     // Create the global root signature and store the empty signature
