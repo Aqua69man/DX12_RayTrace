@@ -79,14 +79,33 @@ void rayGen()
 	//     param_4_5 - Are "RayContributionToHitGroupIndex" and "MultiplierForGeometryContributionToHitGroupIndex".
 	//	    		       They are used for shader-table indexing. We will cover them in later tutorials, 
 	//	    		       for now we will set both to 0.
-	//     param_6	 - Is the miss-shader index. This index is relative to the base miss-shader index we passed when 
+	//     param_6	 - Is the MissShaderIndex. This index is relative to the base miss-shader index we passed when 
 	//	    			   calling DispatchRays(). We only have a single miss-shader, so we will set the index to 0.
 	//     param_7	 - Is the RayDesc object we created.
 	//     param_8	 - RayPayload object.
 	
-	// param_4 - Leaving RayContributionToHitGroupIndex = 0 (This is the first ray)
-	// param_5 - SETTING MultiplierForGeometryContributionToHitGroupIndex = 1
-	// param_6 - Leaving miss-shader index = 0
+	// MISS_SHADER_ID = missOffset(from_DispatchRays=1) + MissShaderIndex(param_6)
+	//	   - missOffset: from_DispatchRays = 1
+	//     - MissShaderIndex: leaving = 0
+	// => MISS_SHADER_ID = 1 + 0 = 1
+
+	// PRIMARY_HIT_SHADER_ID = hitOffset(from_DispatchRays=3)
+	//						   InstanceContributionToHitGroupIndex(from_TLAS) + 
+	//						   GeometryIndex(from_mpVertexBuffer=0/1) * MultiplierForGeometryContributionToShaderIndex(param_5) +
+	//						   RayContributionToHitGroupIndex(param_4)
+	//
+	// RayContributionToHitGroupIndex:						Leaving  = 0 (This is the first ray)
+	// MultiplierForGeometryContributionToHitGroupIndex:	SETTING  = 2
+
+	// We have 11 entries(SHADER_ID):
+	//     Entry 0 - Ray - gen program
+	// 	   Entry 1 - Miss program for the primary ray
+	// 	   Entry 2 - Miss program for the shadow ray
+	// 	   Entries 3, 4 - Hit programs for triangle 0 (primary followed by shadow)
+	// 	   Entries 5, 6 - Hit programs for the plane(primary followed by shadow)
+	// 	   Entries 7, 8 - Hit programs for triangle 1 (primary followed by shadow)
+	// 	   Entries 9, 10 - Hit programs for triangle 2 (primary followed by shadow)
+
     TraceRay( gRtScene, 0 /*rayFlags*/, 0xFF, 0 /* ray index*/, 2 /*!-HERE-!*/, 0, ray, payload );
     float3 col = linearToSrgb(payload.color);
     gOutput[launchIndex.xy] = float4(col, 1);
@@ -127,9 +146,43 @@ void planeChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes
     ray.TMin = 0.01;
     ray.TMax = 100000;
     ShadowPayload shadowPayload;
-	// param_4 - Leaving RayContributionToHitGroupIndex = 1 (This is the second ray - previos ray had index=0, for this one has index=1)
-	// param_5 - Leaving MultiplierForGeometryContributionToHitGroupIndex = 0
-	// param_6 - SETTING miss-shader index = 1
+
+	// TraceRay():
+	//     param_1  -  Is the TLAS SRV.
+	//     param_2  -  Is the ray flags. These flags allow us to control the traversal behavior,
+	//	    		       for example enable back-face culling.
+	//     param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays.
+	//	    		       We will not cover this topic in the tutorials. 0xFF means no culling.
+	//     param_4_5 - Are "RayContributionToHitGroupIndex" and "MultiplierForGeometryContributionToHitGroupIndex".
+	//	    		       They are used for shader-table indexing. We will cover them in later tutorials, 
+	//	    		       for now we will set both to 0.
+	//     param_6	 - Is the MissShaderIndex. This index is relative to the base miss-shader index we passed when 
+	//	    			   calling DispatchRays(). We only have a single miss-shader, so we will set the index to 0.
+	//     param_7	 - Is the RayDesc object we created.
+	//     param_8	 - RayPayload object.
+
+	// MISS_SHADER_ID = missOffset(from_DispatchRays) + MissShaderIndex (param_6)
+	//	   - missOffset(from_DispatchRays) = 1
+	//     - MissShaderIndex: SETTING = 1
+	// => MISS_SHADER_ID = 1 + 1 = 2
+
+	// PRIMARY_HIT_SHADER_ID = hitOffset(from_DispatchRays=3)
+	//						   InstanceContributionToHitGroupIndex(from_TLAS) + 
+	//						   GeometryIndex(from_mpVertexBuffer=0/1) * MultiplierForGeometryContributionToShaderIndex(param_5) +
+	//						   RayContributionToHitGroupIndex(param_4)
+	//
+	// RayContributionToHitGroupIndex:						SETTING  = 1 (This is the second ray - previos ray had index=0, for this one has index=1)
+	// MultiplierForGeometryContributionToHitGroupIndex:	Leaving  = 0
+
+	// We have 11 entries(SHADER_ID):
+	//     Entry 0 - Ray - gen program
+	// 	   Entry 1 - Miss program for the primary ray
+	// 	   Entry 2 - Miss program for the shadow ray
+	// 	   Entries 3, 4 - Hit programs for triangle 0 (primary followed by shadow)
+	// 	   Entries 5, 6 - Hit programs for the plane(primary followed by shadow)
+	// 	   Entries 7, 8 - Hit programs for triangle 1 (primary followed by shadow)
+	// 	   Entries 9, 10 - Hit programs for triangle 2 (primary followed by shadow)
+
     TraceRay(gRtScene, 0  /*rayFlags*/, 0xFF, 1 /* ray index*/, 0, 1 /*!-HERE-!*/, ray, shadowPayload);
 
     float factor = shadowPayload.hit ? 0.1 : 1.0;

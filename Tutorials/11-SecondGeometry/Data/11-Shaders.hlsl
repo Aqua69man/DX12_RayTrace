@@ -78,7 +78,7 @@ void rayGen()
 	// param_4_5 - Are "RayContributionToHitGroupIndex" and "MultiplierForGeometryContributionToHitGroupIndex".
 	//			       They are used for shader-table indexing. We will cover them in later tutorials, 
 	//			       for now we will set both to 0.
-	// param_6	 - Is the miss-shader index. This index is relative to the base miss-shader index we passed when 
+	// param_6	 - Is the MissShaderIndex. This index is relative to the base miss-shader index we passed when 
 	//				   calling DispatchRays(). We only have a single miss-shader, so we will set the index to 0.
 	// param_7	 - Is the RayDesc object we created.
 	// param_8	 - RayPayload object.
