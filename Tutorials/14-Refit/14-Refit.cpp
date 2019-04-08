@@ -453,7 +453,7 @@ void Tutorial14::createAccelerationStructures()
     mpBottomLevelAS[1] = bottomLevelBuffers[1].pResult;
 
     // Create the TLAS
-    buildTopLevelAS(mpDevice, mpCmdList, mpBottomLevelAS, mTlasSize, false, 0, mTopLevelBuffers);
+    buildTopLevelAS(mpDevice, mpCmdList, mpBottomLevelAS, mTlasSize, 0, false, mTopLevelBuffers);
 
     // The tutorial doesn't have any resource lifetime management, so we flush and sync here. This is not required by the DXR spec - you can submit the list whenever you like as long as you take care of the resources lifetime.
     mFenceValue = submitCommandList(mpCmdList, mpCmdQueue, mpFence, mFenceValue);
@@ -1019,7 +1019,7 @@ void Tutorial14::onFrameRender()
     uint32_t rtvIndex = beginFrame();
 
     // Refit the top-level acceleration structure
-    buildTopLevelAS(mpDevice, mpCmdList, mpBottomLevelAS, mTlasSize, mRotation, true, mTopLevelBuffers);
+    buildTopLevelAS(mpDevice, mpCmdList, mpBottomLevelAS, mTlasSize, 0, false, mTopLevelBuffers);
     mRotation += 0.005f;
 
     // Let's raytrace
