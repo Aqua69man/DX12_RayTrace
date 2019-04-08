@@ -352,90 +352,98 @@ Tutorial14::AccelerationStructureBuffers createBottomLevelAS(ID3D12Device5Ptr pD
 
 void buildTopLevelAS(ID3D12Device5Ptr pDevice, ID3D12GraphicsCommandList4Ptr pCmdList, ID3D12ResourcePtr pBottomLevelAS[2], uint64_t& tlasSize, float rotation, bool update, Tutorial14::AccelerationStructureBuffers& buffers)
 {
-    // First, get the size of the TLAS buffers and create them
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-    inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-    inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
-    inputs.NumDescs = 3;
-    inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+	// First, get the size of the TLAS buffers and create them
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;		// <---- if (update)
+	inputs.NumDescs = 3;
+	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
-    pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
+	pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
 
-    if (update)
-    {
-        // If this a request for an update, then the TLAS was already used in a DispatchRay() call. We need a UAV barrier to make sure the read operation ends before updating the buffer
-        D3D12_RESOURCE_BARRIER uavBarrier = {};
-        uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        uavBarrier.UAV.pResource = buffers.pResult;
-        pCmdList->ResourceBarrier(1, &uavBarrier);
-    }
-    else
-    {
-        // If this is not an update operation then we need to create the buffers, otherwise we will refit in-place
-        buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
-        buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
-        buffers.pInstanceDesc = createBuffer(pDevice, sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 3, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ, kUploadHeapProps);
-        tlasSize = info.ResultDataMaxSizeInBytes;
-    }
+	if (update)
+	{
+		// If this a request for an update, then the TLAS was already used in a DispatchRay() call. We need a UAV barrier to make sure the read operation ends before updating the buffer
+		D3D12_RESOURCE_BARRIER uavBarrier = {};
+		uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+		uavBarrier.UAV.pResource = buffers.pResult;
+		pCmdList->ResourceBarrier(1, &uavBarrier);
+	}
+	else
+	{
+		// If this is not an update operation then we need to create the buffers, otherwise we will refit in-place
+		buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
+		buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
+		buffers.pInstanceDesc = createBuffer(pDevice, sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 3, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ, kUploadHeapProps);
+		tlasSize = info.ResultDataMaxSizeInBytes;
+	}
 
-    // Map the instance desc buffer
-    D3D12_RAYTRACING_INSTANCE_DESC* instanceDescs;
-    buffers.pInstanceDesc->Map(0, nullptr, (void**)&instanceDescs);
-    ZeroMemory(instanceDescs, sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 3);
+	// Map the instance desc buffer
+	{
+		// Map
+		D3D12_RAYTRACING_INSTANCE_DESC* instanceDescs;
+		buffers.pInstanceDesc->Map(0, nullptr, (void**)&instanceDescs);
+		{
+			ZeroMemory(instanceDescs, sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 3);
 
-    // The transformation matrices for the instances
-    mat4 transformation[3];
-    mat4 rotationMat = eulerAngleY(rotation);
-    transformation[0] = mat4();
-    transformation[1] = translate(mat4(), vec3(-2, 0, 0)) * rotationMat;
-    transformation[2] = translate(mat4(), vec3(2, 0, 0)) * rotationMat;
+			// The transformation matrices for the instances
+			mat4 transformation[3];
+			mat4 rotationMat = eulerAngleY(rotation);
+			transformation[0] = mat4();
+			transformation[1] = translate(mat4(), vec3(-2, 0, 0)) * rotationMat;
+			transformation[2] = translate(mat4(), vec3(2, 0, 0)) * rotationMat;
 
-    // The InstanceContributionToHitGroupIndex is set based on the shader-table layout specified in createShaderTable()
-    // Create the desc for the triangle/plane instance
-    instanceDescs[0].InstanceID = 0;
-    instanceDescs[0].InstanceContributionToHitGroupIndex = 0;
-    instanceDescs[0].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-    memcpy(instanceDescs[0].Transform, &transformation[0], sizeof(instanceDescs[0].Transform));
-    instanceDescs[0].AccelerationStructure = pBottomLevelAS[0]->GetGPUVirtualAddress();
-    instanceDescs[0].InstanceMask = 0xFF;
-    
-    for (uint32_t i = 1; i < 3; i++)
-    {
-        instanceDescs[i].InstanceID = i; // This value will be exposed to the shader via InstanceID()
-        instanceDescs[i].InstanceContributionToHitGroupIndex = (i * 2) + 2;  // The indices are relative to to the start of the hit-table entries specified in Raytrace(), so we need 4 and 6
-        instanceDescs[i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-        mat4 m = transpose(transformation[i]); // GLM is column major, the INSTANCE_DESC is row major
-        memcpy(instanceDescs[i].Transform, &m, sizeof(instanceDescs[i].Transform));
-        instanceDescs[i].AccelerationStructure = pBottomLevelAS[1]->GetGPUVirtualAddress();
-        instanceDescs[i].InstanceMask = 0xFF; // Ray-Geometry intersections are processed when: (ray-mask__<fromShader_ArgOf_TraceRay> & InstanceMask__<fromTLAS> ) != 0
+			// The InstanceContributionToHitGroupIndex is set based on the shader-table layout specified in createShaderTable()
+			// Create the desc for the triangle/plane instance
+			instanceDescs[0].InstanceID = 0;
+			instanceDescs[0].InstanceContributionToHitGroupIndex = 0;
+			instanceDescs[0].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+			memcpy(instanceDescs[0].Transform, &transformation[0], sizeof(instanceDescs[0].Transform));
+			instanceDescs[0].AccelerationStructure = pBottomLevelAS[0]->GetGPUVirtualAddress();
+			instanceDescs[0].InstanceMask = 0xFF;
 
-    }
+			for (uint32_t i = 1; i < 3; i++)
+			{
+				instanceDescs[i].InstanceID = i; // This value will be exposed to the shader via InstanceID()
+				instanceDescs[i].InstanceContributionToHitGroupIndex = (i * 2) + 2;  // The indices are relative to to the start of the hit-table entries specified in Raytrace(), so we need 4 and 6
+				instanceDescs[i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+				mat4 m = transpose(transformation[i]); // GLM is column major, the INSTANCE_DESC is row major
+				memcpy(instanceDescs[i].Transform, &m, sizeof(instanceDescs[i].Transform));
+				instanceDescs[i].AccelerationStructure = pBottomLevelAS[1]->GetGPUVirtualAddress();
+				instanceDescs[i].InstanceMask = 0xFF; // Ray-Geometry intersections are processed when: (ray-mask__<fromShader_ArgOf_TraceRay> & InstanceMask__<fromTLAS> ) != 0
 
-    // Unmap
-    buffers.pInstanceDesc->Unmap(0, nullptr);
+			}
+		}
+		// Unmap
+		buffers.pInstanceDesc->Unmap(0, nullptr);
+	}
 
     // Create the TLAS
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
-    asDesc.Inputs = inputs;
-    asDesc.Inputs.InstanceDescs = buffers.pInstanceDesc->GetGPUVirtualAddress();
-    asDesc.DestAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
-    asDesc.ScratchAccelerationStructureData = buffers.pScratch->GetGPUVirtualAddress();
+	{
+		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
+		asDesc.Inputs = inputs;
+		asDesc.Inputs.InstanceDescs = buffers.pInstanceDesc->GetGPUVirtualAddress();
+		asDesc.DestAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
+		asDesc.ScratchAccelerationStructureData = buffers.pScratch->GetGPUVirtualAddress();
 
-    // If this is an update operation, set the source buffer and the perform_update flag
-    if(update)
-    {
-        asDesc.Inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
-        asDesc.SourceAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
-    }
+		// If this is an update operation, set the source buffer and the perform_update flag
+		if (update)
+		{
+			asDesc.Inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+			asDesc.SourceAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
+		}
 
-    pCmdList->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
+		pCmdList->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
+	}
 
     // We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
-    D3D12_RESOURCE_BARRIER uavBarrier = {};
-    uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-    uavBarrier.UAV.pResource = buffers.pResult;
-    pCmdList->ResourceBarrier(1, &uavBarrier);
+	{
+		D3D12_RESOURCE_BARRIER uavBarrier = {};
+		uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+		uavBarrier.UAV.pResource = buffers.pResult;
+		pCmdList->ResourceBarrier(1, &uavBarrier);
+	}
 }
 
 void Tutorial14::createAccelerationStructures()
