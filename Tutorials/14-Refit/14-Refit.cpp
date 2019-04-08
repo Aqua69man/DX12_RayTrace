@@ -408,7 +408,8 @@ void buildTopLevelAS(ID3D12Device5Ptr pDevice, ID3D12GraphicsCommandList4Ptr pCm
         mat4 m = transpose(transformation[i]); // GLM is column major, the INSTANCE_DESC is row major
         memcpy(instanceDescs[i].Transform, &m, sizeof(instanceDescs[i].Transform));
         instanceDescs[i].AccelerationStructure = pBottomLevelAS[1]->GetGPUVirtualAddress();
-        instanceDescs[i].InstanceMask = 0xFF;
+        instanceDescs[i].InstanceMask = 0xFF; // Ray-Geometry intersections are processed when: (ray-mask__<fromShader_ArgOf_TraceRay> & InstanceMask__<fromTLAS> ) != 0
+
     }
 
     // Unmap
@@ -1019,7 +1020,7 @@ void Tutorial14::onFrameRender()
     uint32_t rtvIndex = beginFrame();
 
     // Refit the top-level acceleration structure
-    buildTopLevelAS(mpDevice, mpCmdList, mpBottomLevelAS, mTlasSize, 0, false, mTopLevelBuffers);
+    buildTopLevelAS(mpDevice, mpCmdList, mpBottomLevelAS, mTlasSize, mRotation, true, mTopLevelBuffers);
     mRotation += 0.005f;
 
     // Let's raytrace

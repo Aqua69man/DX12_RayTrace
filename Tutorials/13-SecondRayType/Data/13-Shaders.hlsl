@@ -74,8 +74,9 @@ void rayGen()
 	//     param_1  -  Is the TLAS SRV.
 	//     param_2  -  Is the ray flags. These flags allow us to control the traversal behavior,
 	//	    		       for example enable back-face culling.
-	//     param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays.
-	//	    		       We will not cover this topic in the tutorials. 0xFF means no culling.
+	//     param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays. 0xFF means no culling.
+	//					   Ray-Geometry intersections are processed when: 
+	//					   (ray-mask__<fromShader_ArgOf_TraceRay> & InstanceMask__<fromTLAS> ) != 0
 	//     param_4  -  RayContributionToHitGroupIndex - the ray-index. 0 For the primary-ray, 1 for the shadow-ray. 
 	//     param_5  -  MultiplierForGeometryContributionToShaderIndex - only affects instances with multiple geometries in BLAS. 
 	//				       In our case, it affects only BLAS with two geometries (Triangle + Plane). 
@@ -154,8 +155,9 @@ void planeChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes
 	//     param_1  -  Is the TLAS SRV.
 	//     param_2  -  Is the ray flags. These flags allow us to control the traversal behavior,
 	//	    		       for example enable back-face culling.
-	//     param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays.
-	//	    		       We will not cover this topic in the tutorials. 0xFF means no culling.
+	//     param_3	-  Is the ray-mask. It can be used to cull entire objects when tracing rays. 0xFF means no culling.
+	//					   Ray-Geometry intersections are processed when: 
+	//					   (ray-mask__<fromShader_ArgOf_TraceRay> & InstanceMask__<fromTLAS> ) != 0
 	//     param_4  -  RayContributionToHitGroupIndex - the ray-index. 0 For the primary-ray, 1 for the shadow-ray. 
 	//     param_5  -  MultiplierForGeometryContributionToShaderIndex - only affects instances with multiple geometries in BLAS. 
 	//				       In our case, it affects only BLAS with two geometries (Triangle + Plane). 
